@@ -3,17 +3,80 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-interface DataItem {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  createdAt: string;
+type AnyRecord = Record<string, unknown>;
+
+function isRecord(v: unknown): v is AnyRecord {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
+function isRecordArray(v: unknown): v is AnyRecord[] {
+  return Array.isArray(v) && v.every(isRecord);
+}
+
+function toDisplayString(v: unknown) {
+  if (v === null) return 'null';
+  if (v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+function pickField(row: AnyRecord, keys: string[]) {
+  for (const k of keys) {
+    if (k in row && row[k] !== undefined && row[k] !== null) return row[k];
+  }
+  return undefined;
+}
+
+function formatNumber(v: unknown) {
+  const n =
+    typeof v === 'number'
+      ? v
+      : typeof v === 'string'
+        ? Number(v.replace(/,/g, ''))
+        : NaN;
+  if (!Number.isFinite(n)) return toDisplayString(v);
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
+}
+
+function formatCurrency(v: unknown) {
+  const n =
+    typeof v === 'number'
+      ? v
+      : typeof v === 'string'
+        ? Number(v.replace(/,/g, ''))
+        : NaN;
+  if (!Number.isFinite(n)) return toDisplayString(v);
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+const ESTIMATE_COLUMNS: Array<{
+  header: string;
+  keys: string[];
+  render?: (v: unknown) => string;
+}> = [
+  { header: 'CustomerName', keys: ['crca3_customername'] },
+  { header: 'ProjectName', keys: ['crca3_projectname'] },
+  { header: 'Requester', keys: ['crca3_requester'] },
+  { header: 'CustomerEmail', keys: ['crca3_customeremail'] },
+  { header: 'WorkType', keys: ['crca3_worktype'] },
+  { header: 'Quantity', keys: ['crca3_quantity'], render: formatNumber },
+  { header: 'Unit', keys: ['crca3_unit'] },
+  { header: 'UnitPrice', keys: ['crca3_unitprice'], render: formatCurrency },
+  { header: 'Subtotal', keys: ['crca3_subtotal'], render: formatCurrency },
+  { header: 'Tax', keys: ['crca3_tax'], render: formatCurrency },
+];
+
 export default function PowerAppPage() {
-  const [data, setData] = useState<DataItem[]>([]);
+  const [data, setData] = useState<unknown>([]);
+  const [raw, setRaw] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
@@ -35,9 +98,11 @@ export default function PowerAppPage() {
         : '/api/powerapp';
       const response = await fetch(url);
       const result = await response.json();
+      console.log("11111111111", result);
       
       if (result.success) {
         setData(result.data);
+        setRaw(result.raw ?? null);
       } else {
         setError(result.message || 'Failed to fetch data');
       }
@@ -64,153 +129,85 @@ export default function PowerAppPage() {
         </Link>
       </div>
 
-      <h1>Power Apps Data Integration</h1>
-      
-      <div style={{ 
-        backgroundColor: '#f5f5f5', 
-        padding: '1.5rem', 
-        borderRadius: '8px',
-        marginBottom: '2rem'
-      }}>
-        <h2 style={{ marginTop: 0 }}>API Endpoint Information</h2>
-        <p><strong>API URL:</strong> <code style={{ backgroundColor: '#fff', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>{apiUrl}</code></p>
-        <p><strong>Methods:</strong> GET, POST, OPTIONS</p>
-        <p><strong>CORS:</strong> Enabled (All origins allowed)</p>
-        
-        <div style={{ marginTop: '1rem' }}>
-          <h3>GET Request Examples:</h3>
-          <ul>
-            <li>Get all data: <code>{apiUrl}</code></li>
-            <li>Filter by name/category: <code>{apiUrl}?filter=Electronics</code></li>
-            <li>Limit results: <code>{apiUrl}?limit=2</code></li>
-          </ul>
-        </div>
-
-        <div style={{ marginTop: '1rem' }}>
-          <h3>POST Request Example (Power Apps):</h3>
-          <pre style={{ 
-            backgroundColor: '#fff', 
-            padding: '1rem', 
-            borderRadius: '4px',
-            overflow: 'auto'
-          }}>
-{`POST ${apiUrl}
-Content-Type: application/json
-
-{
-  "name": "New Product",
-  "category": "Electronics",
-  "price": 199.99,
-  "stock": 30
-}`}
-          </pre>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <input
-            type="text"
-            placeholder="Filter by name or category..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            style={{
-              padding: '0.5rem',
-              borderRadius: '4px',
-              border: '1px solid #ccc',
-              flex: 1,
-              maxWidth: '300px'
-            }}
-          />
-          <button
-            onClick={handleFilter}
-            disabled={loading}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#0070f3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? 'Loading...' : 'Filter'}
-          </button>
-          <button
-            onClick={() => {
-              setFilter('');
-              fetchData();
-            }}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#666',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div style={{
-          backgroundColor: '#fee',
-          color: '#c33',
-          padding: '1rem',
-          borderRadius: '4px',
-          marginBottom: '1rem'
-        }}>
-          Error: {error}
-        </div>
-      )}
-
       {loading ? (
         <p>Loading data...</p>
       ) : (
         <div>
-          <h2>Data ({data.length} items)</h2>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              backgroundColor: '#fff',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f5f5f5' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>ID</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Category</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Price</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Stock</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Created At</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '1rem', textAlign: 'center' }}>
-                      No data found
-                    </td>
+          <h2>Data</h2>
+
+          {isRecordArray(data) ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  backgroundColor: '#fff',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: '#f5f5f5' }}>
+                    {ESTIMATE_COLUMNS.map((c) => (
+                      <th
+                        key={c.header}
+                        style={{
+                          padding: '0.75rem',
+                          textAlign: 'left',
+                          borderBottom: '2px solid #ddd',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {c.header}
+                      </th>
+                    ))}
                   </tr>
-                ) : (
-                  data.map((item) => (
-                    <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: '0.75rem' }}>{item.id}</td>
-                      <td style={{ padding: '0.75rem' }}>{item.name}</td>
-                      <td style={{ padding: '0.75rem' }}>{item.category}</td>
-                      <td style={{ padding: '0.75rem' }}>${item.price.toFixed(2)}</td>
-                      <td style={{ padding: '0.75rem' }}>{item.stock}</td>
-                      <td style={{ padding: '0.75rem' }}>{item.createdAt}</td>
+                </thead>
+                <tbody>
+                  {data.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={ESTIMATE_COLUMNS.length}
+                        style={{ padding: '1rem', textAlign: 'center' }}
+                      >
+                        No data found
+                      </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    data.map((row, idx) => (
+                      <tr key={String(row.id ?? row.ID ?? row.estimateid ?? idx)} style={{ borderBottom: '1px solid #eee' }}>
+                        {ESTIMATE_COLUMNS.map((c) => {
+                          const v = pickField(row, c.keys);
+                          const out = c.render ? c.render(v) : toDisplayString(v);
+                          return (
+                            <td key={c.header} style={{ padding: '0.75rem', whiteSpace: 'nowrap' }}>
+                              {out}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div>
+              <p style={{ marginTop: 0 }}>
+                Dữ liệu trả về không phải dạng “array of objects”, nên mình hiển thị JSON.
+              </p>
+              <pre
+                style={{
+                  backgroundColor: '#fff',
+                  padding: '1rem',
+                  borderRadius: '4px',
+                  overflow: 'auto',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+{JSON.stringify(data, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>

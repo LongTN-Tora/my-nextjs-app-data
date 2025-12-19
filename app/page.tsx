@@ -4,11 +4,10 @@ import Link from "next/link";
 export default function Home() {
   return (
     <div>
-      <h1>Welcome to my Next.js App</h1>
-      <p>This is a simple web application.</p>
+      <h1><b>Welcome to my Next.js App</b></h1>
       <div style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
-        <Link href="/about">Go to About Page</Link>
-        <Link href="/powerapp">Power Apps Integration</Link>
+        <Link href="/about">Register Data Power Apps</Link>
+        <Link href="/powerapp">List Data Power Apps</Link>
       </div>
     </div>
   );
